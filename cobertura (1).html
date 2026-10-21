@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cobertura 1T</title>
+<style>
+:root{
+  --bg:#f2f4ef; --surface:#ffffff; --fg:#14211a; --muted:#5a6a60; --line:#dce3da;
+  --accent:#1d7a4b; --accent-fg:#ffffff; --good:#1d7a4b; --mid:#a8741a; --low:#b23b2b;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1712; --surface:#17211b; --fg:#e6efe8; --muted:#93a59a; --line:#26342b;
+    --accent:#4cc185; --accent-fg:#06150d; --good:#4cc185; --mid:#e0a94a; --low:#ee7a69; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1712; --surface:#17211b; --fg:#e6efe8; --muted:#93a59a; --line:#26342b;
+  --accent:#4cc185; --accent-fg:#06150d; --good:#4cc185; --mid:#e0a94a; --low:#ee7a69; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{color-scheme:light}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 var(--sans);
+  padding-block:max(16px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap{max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:14px}
+h1{font-size:22px; margin:0}
+h1 span{color:var(--accent)}
+.sub{margin:2px 0 0; color:var(--muted); font-size:13px}
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:12px}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px}
+label{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; min-width:0}
+input,textarea{font:inherit; font-size:16px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:9px 10px; min-width:0; width:100%}
+textarea{min-height:150px; resize:vertical; font-family:var(--mono); font-size:14px}
+input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+button{font:inherit; font-weight:600; border:0; border-radius:8px; padding:10px 16px; background:var(--accent); color:var(--accent-fg); cursor:pointer}
+button[disabled]{opacity:.5; cursor:default}
+.meta{font-size:13px; color:var(--muted)}
+.meta b{color:var(--fg); font-family:var(--mono)}
+.err{color:var(--low); font-size:13px; white-space:pre-wrap}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse; width:100%; min-width:460px; font-size:14px}
+th,td{text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600}
+td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+.good{color:var(--good)} .mid{color:var(--mid)} .low{color:var(--low)}
+.foot{font-size:12px; color:var(--muted); line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>COBERTURA <span>1T</span></h1>
+    <p class="sub">Comprueba en qué ligas la API trae el marcador al descanso, usando una temporada pasada que el plan gratuito sí permite.</p>
+  </header>
+
+  <section class="panel">
+    <div class="grid">
+      <label for="key">API key de API-Football
+        <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pegá tu key">
+      </label>
+      <label for="season">Temporada
+        <input id="season" type="number" min="2022" max="2024" inputmode="numeric" value="2024">
+      </label>
+    </div>
+    <label for="names">Ligas a probar (una por línea: nombre | país, en inglés)
+      <textarea id="names" spellcheck="false">Pro League | Saudi-Arabia
+Liga MX | Mexico
+Liga Profesional Argentina | Argentina
+Eredivisie | Netherlands
+Primeira Liga | Portugal
+Lig | Turkey
+Ligue 1 | France
+Serie A | Brazil
+Major League Soccer | USA</textarea>
+    </label>
+    <div class="row">
+      <button id="go" type="button">Probar</button>
+    </div>
+    <div class="meta">Consultas restantes hoy: <b id="rem">—</b> · usadas ahora: <b id="calls">0</b> (2 por liga)</div>
+    <div class="meta" id="status" role="status" aria-live="polite"></div>
+    <div class="err" id="errs"></div>
+  </section>
+
+  <section class="panel" id="out" hidden>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Liga</th><th>Terminados</th><th>Con goles al descanso</th><th>%</th><th>Ejemplo</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">Un partido cuenta como "con dato" cuando la API devuelve el marcador al descanso de los dos equipos. Si un porcentaje es alto en la temporada pasada, es muy probable que la temporada actual también venga completa en un plan pago, aunque la API no lo garantiza. Tu key se guarda solo en este navegador.</p>
+</div>
+
+<script>
+/*TEST-START*/
+function halftimeStats(fixtures){
+  let fin = 0, withHT = 0, sample = null;
+  fixtures.forEach(f => {
+    const st = f.fixture && f.fixture.status && f.fixture.status.short;
+    if (st !== 'FT' && st !== 'AET' && st !== 'PEN') return;
+    fin++;
+    const ht = f.score && f.score.halftime;
+    if (ht && ht.home !== null && ht.home !== undefined && ht.away !== null && ht.away !== undefined) {
+      withHT++;
+      if (!sample) sample = f.teams.home.name + ' ' + f.goals.home + '-' + f.goals.away + ' ' + f.teams.away.name + ' (HT ' + ht.home + '-' + ht.away + ')';
+    }
+  });
+  return { fin: fin, withHT: withHT, pct: fin ? withHT / fin * 100 : null, sample: sample };
+}
+function pickLeague(list, wanted, season, country){
+  const w = wanted.toLowerCase(), c = (country || '').toLowerCase();
+  let L = list.filter(x => x.league && x.league.type === 'League');
+  if (season) L = L.filter(x => (x.seasons || []).some(s => s.year === season));
+  if (c) L = L.filter(x => x.country && String(x.country.name).toLowerCase().indexOf(c) !== -1);
+  L.sort((x, y) => {
+    const ex = x.league.name.toLowerCase() === w ? 0 : 1, ey = y.league.name.toLowerCase() === w ? 0 : 1;
+    return ex - ey || x.league.id - y.league.id;
+  });
+  return L[0] || null;
+}
+/*TEST-END*/
+
+const API = 'https://v3.football.api-sports.io';
+const LS = 'radar1t.';
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const st = { key:'', calls:0, remaining:null };
+function lsGet(k){ try { return JSON.parse(localStorage.getItem(LS + k)); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) {} }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function addErr(t){ const el = $('errs'); el.textContent = (el.textContent ? el.textContent + '\n' : '') + t; }
+
+async function api(path, params){
+  const url = new URL(API + path);
+  Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+  await sleep(700);
+  const res = await fetch(url.toString(), { headers: { 'x-apisports-key': st.key } });
+  st.calls++;
+  const rem = res.headers.get('x-ratelimit-requests-remaining');
+  if (rem !== null && rem !== '') st.remaining = Number(rem);
+  $('rem').textContent = st.remaining === null ? '—' : st.remaining;
+  $('calls').textContent = st.calls;
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+  const e = j.errors;
+  const has = Array.isArray(e) ? e.length > 0 : (e && Object.keys(e).length > 0);
+  if (has) throw new Error(Object.keys(e).map(k => e[k]).join(' · '));
+  return j.response;
+}
+
+function cls(p){ return p === null ? '' : p >= 95 ? 'good' : p >= 80 ? 'mid' : 'low'; }
+
+async function run(){
+  st.key = $('key').value.trim();
+  const season = Number($('season').value) || 2024;
+  const names = $('names').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!st.key) { $('status').textContent = 'Falta la API key.'; return; }
+  lsSet('key', st.key);
+  $('go').disabled = true; $('errs').textContent = ''; $('rows').innerHTML = ''; $('out').hidden = false; st.calls = 0;
+  for (let i = 0; i < names.length; i++) {
+    const parts = names[i].split('|');
+    const name = parts[0].trim(), country = (parts[1] || '').trim();
+    $('status').textContent = '(' + (i + 1) + '/' + names.length + ') ' + name + '…';
+    try {
+      const found = await api('/leagues', { search: name });
+      const lg = pickLeague(found, name, season, country);
+      if (!lg) { $('rows').insertAdjacentHTML('beforeend', '<tr><td>' + esc(names[i]) + '</td><td colspan="4" class="low">No encontrada para ' + season + '</td></tr>'); continue; }
+      const fx = await api('/fixtures', { league: lg.league.id, season: season });
+      const s = halftimeStats(fx);
+      $('rows').insertAdjacentHTML('beforeend',
+        '<tr><td>' + esc(lg.league.name) + '<div class="meta">' + esc(lg.country ? lg.country.name : '') + ' · id ' + lg.league.id + '</div></td>' +
+        '<td class="n">' + s.fin + '</td><td class="n">' + s.withHT + '</td>' +
+        '<td class="n ' + cls(s.pct) + '">' + (s.pct === null ? '—' : Math.round(s.pct) + '%') + '</td>' +
+        '<td class="meta">' + esc(s.sample || '—') + '</td></tr>');
+    } catch (e) {
+      addErr(names[i] + ': ' + e.message);
+      if (/token|key|limit|plan/i.test(e.message)) break;
+    }
+  }
+  $('status').textContent = 'Listo.';
+  $('go').disabled = false;
+}
+const k = lsGet('key'); if (k) $('key').value = k;
+$('go').addEventListener('click', run);
+</script>
+</body>
+</html>
